@@ -122,12 +122,121 @@ class Match
 {
 private:
     Team team1, team2;
-    Bowler bowler;
+
+    Team *battingTeam;        
+    Team *bowlingTeam;         
+
+    Bowler bowlers[MAX_PLAYERS];
+    int currentBowler;          
+    int previousBowler;          
+    int maxOversPerBowler;      
 
     int overs;
     int striker;
     int nonStriker;
     int nextBatsman;
+
+    int findPlayer(Team &t, string n)
+    {
+        for (int i = 0; i < MAX_PLAYERS; i++)
+        {
+            if (t.players[i].name == n)
+                return i;
+        }
+        return -1;
+    }
+
+    void doToss()
+    {
+        int tossWinner, decision;
+
+        cout << "\n------ TOSS ------\n";
+
+        while (true)
+        {
+            cout << "Who won the toss?\n";
+            cout << "1. " << team1.name << "\n";
+            cout << "2. " << team2.name << "\n";
+            cout << "Enter choice: ";
+            cin >> tossWinner;
+
+            if (tossWinner == 1 || tossWinner == 2)
+                break;
+
+            cout << "Invalid choice. Try again.\n";
+        }
+
+        string winnerName = (tossWinner == 1) ? team1.name : team2.name;
+
+        while (true)
+        {
+            cout << "\n" << winnerName << " won the toss. Choose:\n";
+            cout << "1. Bat first\n";
+            cout << "2. Bowl first\n";
+            cout << "Enter choice: ";
+            cin >> decision;
+
+            if (decision == 1 || decision == 2)
+                break;
+
+            cout << "Invalid choice. Try again.\n";
+        }
+
+        bool team1Bats;
+        if (tossWinner == 1 && decision == 1)
+            team1Bats = true;
+        else if (tossWinner == 2 && decision == 2)
+            team1Bats = true;
+        else
+            team1Bats = false;
+
+        if (team1Bats)
+        {
+            battingTeam = &team1;
+            bowlingTeam = &team2;
+        }
+        else
+        {
+            battingTeam = &team2;
+            bowlingTeam = &team1;
+        }
+
+        cout << "\n" << battingTeam->name << " will bat first.\n";
+        cout << bowlingTeam->name << " will bowl first.\n";
+    }
+
+    void chooseBowler(int overNo)
+    {
+        while (true)
+        {
+            string n;
+            cout << "\nOver " << overNo << " - Enter bowler name (from "
+                 << bowlingTeam->name << "): ";
+            cin >> n;
+
+            int idx = findPlayer(*bowlingTeam, n);
+
+            if (idx == -1)
+            {
+                cout << "Invalid! Bowler must be a player of " << bowlingTeam->name << ".\n";
+            }
+            else if (idx == previousBowler)
+            {
+                cout << "Invalid! A bowler cannot bowl two overs in a row.\n";
+            }
+            else if (bowlers[idx].ballsBowled / 6 >= maxOversPerBowler)
+            {
+                cout << "Invalid! " << n << " has already bowled the maximum "
+                     << maxOversPerBowler << " over(s).\n";
+            }
+            else
+            {
+                currentBowler = idx;
+                bowlers[idx].name = n;
+                break;
+            }
+        }
+    }
 
 public:
     void startMatch()
@@ -135,32 +244,59 @@ public:
         cout << "Enter number of overs: ";
         cin >> overs;
 
+        maxOversPerBowler = (overs + 4) / 5;
+
         cout << "\nEnter details for Team 1\n";
         team1.inputTeam();
 
         cout << "\nEnter details for Team 2\n";
         team2.inputTeam();
 
-        cout << "\nEnter bowler name: ";
-        cin >> bowler.name;
+        doToss();
 
         striker = 0;
         nonStriker = 1;
         nextBatsman = 2;
+
+        currentBowler = -1;
+        previousBowler = -1;
 
         playInnings();
     }
 
     void playInnings()
     {
+        Team &batting = *battingTeam;   
+
         int totalBalls = overs * 6;
+        int lastOverAsked = 0;        
 
         for (int ball = 1; ball <= totalBalls; )
         {
-            if (team1.totalWickets == 10)
+            if (batting.totalWickets == 10)
                 break;
 
-            cout << "\nBall " << ball << endl;
+            int overNo = (ball - 1) / 6 + 1;
+
+            if (overNo != lastOverAsked)
+            {
+                if (overNo > 1)
+                {
+                    previousBowler = currentBowler;
+
+                    int temp = striker;
+                    striker = nonStriker;
+                    nonStriker = temp;
+                }
+
+                chooseBowler(overNo);
+                lastOverAsked = overNo;
+            }
+
+            Bowler &bowler = bowlers[currentBowler];   
+
+            cout << "\nBall " << ball << " (Over " << overNo << ", bowler: "
+                 << bowler.name << ")" << endl;
             cout << "1. Dot ball\n";
             cout << "2. Runs (1, 2, 3, 4, 6)\n";
             cout << "3. Wicket\n";
@@ -173,7 +309,7 @@ public:
 
             if (choice == 1)
             {
-                team1.players[striker].balls++;
+                batting.players[striker].balls++;
                 bowler.addBall();
                 ball++;
             }
@@ -186,8 +322,8 @@ public:
                 if (runs == 1 || runs == 2 || runs == 3 ||
                     runs == 4 || runs == 6)
                 {
-                    team1.players[striker].addRuns(runs);
-                    team1.totalRuns += runs;
+                    batting.players[striker].addRuns(runs);
+                    batting.totalRuns += runs;
                     bowler.runsGiven += runs;
 
                     if (runs % 2 == 1)
@@ -207,9 +343,9 @@ public:
             }
             else if (choice == 3)
             {
-                team1.players[striker].balls++;
-                team1.players[striker].out = true;
-                team1.totalWickets++;
+                batting.players[striker].balls++;
+                batting.players[striker].out = true;
+                batting.totalWickets++;
                 bowler.wickets++;
                 bowler.addBall();
                 ball++;
@@ -222,8 +358,8 @@ public:
             }
             else if (choice == 4)
             {
-                team1.totalRuns++;
-                team1.extras++;
+                batting.totalRuns++;
+                batting.extras++;
                 bowler.runsGiven++;
             }
             else if (choice == 5)
@@ -232,8 +368,8 @@ public:
                 cout << "Enter runs scored off the bat: ";
                 cin >> runs;
 
-                team1.totalRuns += runs + 1;
-                team1.extras++;
+                batting.totalRuns += runs + 1;
+                batting.extras++;
                 bowler.runsGiven += runs + 1;
             }
             else
@@ -241,15 +377,27 @@ public:
                 cout << "Invalid choice. Try again.\n";
             }
 
-            team1.displayScore();
+            batting.displayScore();
 
             cout << "\nBowling Figures\n";
             cout << "Bowler\tOvers\tRuns\tWickets\n";
-            bowler.display();
+            for (int i = 0; i < MAX_PLAYERS; i++)
+            {
+                if (bowlers[i].name != "")
+                    bowlers[i].display();
+            }
         }
 
         cout << "\nInnings completed!\n";
-        team1.displayScore();
+        batting.displayScore();
+
+        cout << "\nFinal Bowling Figures\n";
+        cout << "Bowler\tOvers\tRuns\tWickets\n";
+        for (int i = 0; i < MAX_PLAYERS; i++)
+        {
+            if (bowlers[i].name != "")
+                bowlers[i].display();
+        }
     }
 };
 
